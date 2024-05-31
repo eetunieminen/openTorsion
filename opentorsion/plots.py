@@ -79,7 +79,7 @@ class Plots:
         for i, harmonic in enumerate(harmonics):
             ax.plot(
                 frequency_range_rpm,
-                [0, harmonic * (frequency_range_rpm[1] + 50) / 60],
+                [0, harmonic * (frequency_range_rpm[1]) / 60],
                 color="blue",
             )
             ax.text(
@@ -209,7 +209,12 @@ class Plots:
         num_segments = 6  # number of lines in a spring
         amplitude = 0.1  # spring "height"
 
-        def draw_spring(left, right, y_pos):
+        def draw_spring(shaft, y_pos):
+            left  = shaft.nl
+            right = shaft.nr
+            if shaft.c != 0:
+                draw_dashpot(((left + right) / 2, -2 * y_pos + amplitude * 1.5), 2 * amplitude, right - left - width)
+                y_pos += amplitude*1.5/2
             x1, y1 = left + width / 2, -2 * y_pos
             x2, y2 = right - width / 2, -2 * y_pos
             x_values = np.linspace(x1, x2, num_segments)
