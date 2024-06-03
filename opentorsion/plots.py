@@ -97,7 +97,7 @@ class Plots:
 
     def plot_eigenmodes(self, modes=5):
         """
-        Updated eigenmode plot. Geared systems not supported.
+        Updated eigenmode plot. Branching geared systems not supported.
         The eigenvectors are plotted over the assembly schematic, and the
         trajectories are plotted with dashed lines. Each plotted eigenvector is
         rotated so that the node with maximum abs displacement has phase of 0
@@ -107,30 +107,26 @@ class Plots:
         modes : int
             Number of eigenodes to be plotted, can't be higher than the DoFs
         """
-        # if self.assembly.gear_elements is not None:
-        #     raise NotImplementedError('Support for geared assemblies not implemented')
         if self.assembly.dofs < modes:
             modes = self.assembly.dofs
 
         gear_nodes = []
-        for gear in self.assembly.gear_elements:
-            if gear.stages is not None:
-                gear_nodes.append(gear.node)
-
+        if self.assembly.gear_elements is not None:
+            for gear in self.assembly.gear_elements:
+                if gear.stages is not None:
+                    gear_nodes.append(gear.node)
+                    
         lam, eigenmodes = self.assembly.eigenmodes()
         phases = np.angle(eigenmodes)
         nodes = np.arange(0, self.assembly.dofs)
-
         fig_modes, axs = plt.subplots(modes, 1, sharex=True)
-
-        cut_segments = []
-        start_index = 0
-        for point in gear_nodes:
-            cut_segments.append(nodes[start_index:point])
-            start_index = point
-        cut_segments.append(nodes[start_index:])
-        print(cut_segments)
-
+        # segments consists of lists of nodes between 2 gears
+        segments = []
+        start = 0
+        for gear_node in gear_nodes:
+            segments.append(nodes[start:gear_node])
+            start = gear_node
+        segments.append(nodes[start:])
 
         for i in range(modes):
             eigenvector = eigenmodes[:, i]
@@ -138,16 +134,11 @@ class Plots:
             eigenvector_rotated = eigenvector * np.exp(-1.0j*phases[max_disp, i])
             self.plot_on_ax(self.assembly, axs[i], alpha=0.2)
             vector = np.real(eigenvector_rotated)/np.sqrt(np.sum(np.real(eigenvector_rotated)**2))
-            print(f"vector: {vector}")
             end = 0
-            for j, segment in enumerate(cut_segments):
-                print(segment)
-                print(vector[end:end+len(segment)])
+            for j, segment in enumerate(segments):
+                # plot segment and corresponding part of the eigenvector
                 axs[i].plot(segment, vector[end:end+len(segment)]-2*j,color='red')
-                end = segment[-1]
-
-            # axs[i].plot(nodes, np.real(eigenvector_rotated)/np.sqrt(np.sum(np.real(eigenvector_rotated)**2)),color='red')
-            # axs[i].plot([nodes,nodes],[np.abs(eigenvector_rotated),-np.abs(eigenvector_rotated)],'--',color='black')
+                end = segment[-1]-j
             axs[i].set_ylim([-2*j-1.1,1.1])
         plt.show()
         return
@@ -270,7 +261,7 @@ class Plots:
             if shaft.c != 0:
                 draw_dashpot(((left + right) / 2, -2 * y_pos + amplitude * 1.5), 2 * amplitude, right - left - width)
                 y_pos += amplitude*1.5/2
-            x1, y1 = left + width / 2, -2 * y_pos
+            x1, y1 = left  + width / 2, -2 * y_pos
             x2, y2 = right - width / 2, -2 * y_pos
             x_values = np.linspace(x1, x2, num_segments)
             y_values = np.linspace(y1, y2, num_segments)
