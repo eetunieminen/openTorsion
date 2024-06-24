@@ -40,7 +40,7 @@ class Plots:
         harmonics : list, optional
                 List containing the harmonic multipliers
         """
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(5, 4))
 
         # Operating speeds
         for i, operating_speed_rpm in enumerate(operating_speeds_rpm):
@@ -58,9 +58,7 @@ class Plots:
                 alpha=0.2,
             )
             ax.add_patch(rectangle)
-
         harmonics = sorted(harmonics)
-
         undamped_nf, damped_nf, damping_ratios = self.assembly.modal_analysis()
         freqs = undamped_nf[::2] / (2 * np.pi)
         freqs = freqs[:num_modes]
@@ -95,7 +93,7 @@ class Plots:
 
         return
 
-    def plot_eigenmodes(self, modes=5):
+    def plot_eigenmodes(self, modes=5, show_plot=False):
         """
         Updated eigenmode plot. Branching geared systems not supported.
         The eigenvectors are plotted over the assembly schematic, and the
@@ -115,11 +113,11 @@ class Plots:
             for gear in self.assembly.gear_elements:
                 if gear.stages is not None:
                     gear_nodes.append(gear.node)
-                    
+
         lam, eigenmodes = self.assembly.eigenmodes()
         phases = np.angle(eigenmodes)
         nodes = np.arange(0, self.assembly.dofs)
-        fig_modes, axs = plt.subplots(modes, 1, sharex=True)
+        fig_modes, axs = plt.subplots(modes, 1, sharex=True, figsize=(4,3*3))
         # segments consists of lists of nodes between 2 gears
         segments = []
         start = 0
@@ -135,12 +133,24 @@ class Plots:
             self.plot_on_ax(self.assembly, axs[i], alpha=0.2)
             vector = np.real(eigenvector_rotated)/np.sqrt(np.sum(np.real(eigenvector_rotated)**2))
             end = 0
+            
+            axs[i].plot(
+                nodes[:8],
+                np.real(eigenvector_rotated)
+                / np.sqrt(np.sum(np.real(eigenvector_rotated) ** 2)),
+                color="orange",
+            )
+
             for j, segment in enumerate(segments):
                 # plot segment and corresponding part of the eigenvector
                 axs[i].plot(segment, vector[end:end+len(segment)]-2*j,color='red')
                 end = segment[-1]-j
+            axs[i].set_yticks([])
             axs[i].set_ylim([-2*j-1.1,1.1])
-        plt.show()
+
+        axs[-1].set_xlabel("node")
+        if show_plot:
+            plt.show()
         return
         # """
         # Updated eigenmode plot. Geared systems not supported.
@@ -211,11 +221,11 @@ class Plots:
         if show_plot:
             plt.show()
 
-    def plot_assembly(self):
+    def plot_assembly(self, show_plot=False):
         """
         Plots the given assembly as disk and spring elements
         """
-        fig, ax = plt.subplots(figsize=(5, 4))
+        fig, ax = plt.subplots(figsize=(4, 3))
         self.plot_on_ax(self.assembly, ax)
         ax.set_xticks(np.arange(0, self.assembly.dofs, step=1))
         ax.set_xlabel("node")
@@ -224,7 +234,8 @@ class Plots:
         ax.spines["right"].set_visible(False)
         ax.spines["left"].set_visible(False)
         plt.tight_layout()
-        plt.show()
+        if show_plot:
+            plt.show()
         return
 
     def plot_on_ax(self, assembly, ax, alpha=1):
@@ -252,7 +263,7 @@ class Plots:
         min_I_value = min_I_disk.I
         disk_max, disk_min = 1.8, 0.5
         width = 0.5
-        num_segments = 6  # number of lines in a spring
+        num_segments = 8  # number of lines in a spring
         amplitude = 0.1  # spring "height"
 
         def draw_spring(shaft, y_pos):
@@ -263,24 +274,27 @@ class Plots:
                 y_pos += amplitude*1.5/2
             x1, y1 = left  + width / 2, -2 * y_pos
             x2, y2 = right - width / 2, -2 * y_pos
-            x_values = np.linspace(x1, x2, num_segments)
-            y_values = np.linspace(y1, y2, num_segments)
-            for i in range(0, num_segments):
+            seg_len = (x2-x1) / num_segments # length of a spring segment
+            x_values = np.linspace(x1 + 1.5 * seg_len, x2 - 1.5 * seg_len, num_segments - 2)
+            x_values = np.insert(x_values,  0, x1)
+            x_values = np.insert(x_values,  1, x1 + seg_len)
+            x_values = np.append(x_values, x2 - seg_len)
+            x_values = np.append(x_values, x2)
+            y_values = np.linspace(y1, y2, num_segments+2)
+            for i in range(2, len(y_values)-2):
                 if i % 2 == 0:
                     y_values[i] += amplitude
                 else:
                     y_values[i] -= amplitude
-            for i in range(num_segments - 1):
-                ax.plot(
-                    x_values[i : i + 2], y_values[i : i + 2], color="k", alpha=alpha
-                )
+            ax.plot(
+                x_values, y_values, color="k", alpha=alpha, linewidth=2
+            )
 
-        def draw_disk(disk, pos, i, color="darkgrey"):
-            node = pos
+        def draw_disk(disk, i, color="darkgrey"):
             height = (disk.I - min_I_value) / (max_I_value - min_I_value) * (
                 disk_max - disk_min
             ) + disk_min
-            pos = (node - width / 2, -height / 2 - 2 * i)
+            pos = (disk.node - width / 2, -height / 2 - 2 * i)
             ax.add_patch(
                 patches.Rectangle(
                     pos,
@@ -289,30 +303,31 @@ class Plots:
                     fill=True,
                     edgecolor="black",
                     facecolor=color,
-                    linewidth=1.5,
+                    linewidth=2,
                     alpha=alpha,
                 )
             )
 
         def draw_dashpot(center, height, width):
+            lw=2
             ax.plot([center[0] - width / 2, center[0] - width / 4],
                     [center[1], center[1]],
-                    color='black', alpha=alpha)
+                    color='black', alpha=alpha, linewidth=lw)
             ax.plot([center[0] - width / 4, center[0] - width / 4],
                     [center[1] - height / 2, center[1] + height / 2],
-                    color='black', alpha=alpha)
+                    color='black', alpha=alpha, linewidth=lw)
             ax.plot([center[0] - width / 4, center[0] + width / 4],
                     [center[1] + height / 2, center[1] + height / 2],
-                    color='black', alpha=alpha)
+                    color='black', alpha=alpha, linewidth=lw)
             ax.plot([center[0] - width / 4, center[0] + width / 4],
                     [center[1] - height / 2, center[1] - height / 2],
-                    color='black', alpha=alpha)
+                    color='black', alpha=alpha, linewidth=lw)
             ax.plot([center[0], center[0]],
                     [center[1] - height / 2, center[1] + height / 2],
-                    color='black', alpha=alpha)
+                    color='black', alpha=alpha, linewidth=lw)
             ax.plot([center[0], center[0] + width / 2],
                     [center[1], center[1]],
-                    color='black', alpha=alpha)
+                    color='black', alpha=alpha, linewidth=lw)
 
         gear_pos = {}
         for gear in gears:
@@ -320,7 +335,6 @@ class Plots:
         disk_pos = {}
         for disk in disks:
             disk_pos[disk.node] = disk
-
         prev_nr = 0
         y_height = 0
         for i, shaft in enumerate(shafts):
@@ -332,15 +346,16 @@ class Plots:
                 draw_spring(shaft, y_height)
                 prev_nr = shaft.nr
             if shaft.nl in gear_pos:
-                draw_disk(gear_pos[shaft.nl][0], shaft.nl, y_height, "red")
+                draw_disk(gear_pos[shaft.nl][0], y_height, "red")
                 gear_pos[shaft.nl][1] = [shaft.nl, -2 * y_height]
-            else:
-                draw_disk(disk_pos[shaft.nl], shaft.nl, y_height)
-            if shaft.nr in gear_pos:
-                draw_disk(gear_pos[shaft.nr][0], shaft.nr, y_height, "red")
-                gear_pos[shaft.nr][1] = [shaft.nr, -2 * y_height]
-            else:
-                draw_disk(disk_pos[shaft.nr], shaft.nr, y_height)
+            elif shaft.nl in disk_pos:
+                draw_disk(disk_pos[shaft.nl], y_height)
+        shaft = shafts[-1]
+        if shaft.nr in gear_pos:
+            draw_disk(gear_pos[shaft.nr][0], y_height, "red")
+            gear_pos[shaft.nr][1] = [shaft.nr, -2 * y_height]
+        elif shaft.nr in disk_pos:
+            draw_disk(disk_pos[shaft.nr], y_height)
         # draw dashedlines connecting gear to parent gear
         for node, gear_and_pos in gear_pos.items():
             gear = gear_and_pos[0]
