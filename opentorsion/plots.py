@@ -107,7 +107,7 @@ class Plots:
 
     def plot_eigenmodes(self, modes=5):
         """
-        Updated eigenmode plot. Geared systems not supported.
+        Updated eigenmode plot. Branching geared systems not supported.
         The eigenvectors are plotted over the assembly schematic, and the
         trajectories are plotted with dashed lines. Each plotted eigenvector is
         rotated so that the node with maximum abs displacement has phase of 0
@@ -117,13 +117,26 @@ class Plots:
         modes : int
             Number of eigenodes to be plotted
         """
-        if self.assembly.gear_elements is not None:
-            raise NotImplementedError("Support for geared assemblies not implemented")
         if self.assembly.dofs < modes:
             modes = self.assembly.dofs
+
+        # If assembly has gears, find parent gears
+        # gear_nodes_red is gear nodes in redused assembly, where one gear pair is
+        # redused to a single element. This approach is used in calculating the eigenvector
+        gear_nodes = []
+        gear_nodes_red = []
+        if self.assembly.gear_elements is not None:
+            i=0
+            for gear in self.assembly.gear_elements:
+                if gear.parent is None:
+                    gear_nodes.append(gear.node)
+                    gear_nodes_red.append(gear.node + i)
+                    i-=1
+
         lam, eigenmodes = self.assembly.eigenmodes()
         phases = np.angle(eigenmodes)
-        nodes = np.arange(0, self.assembly.dofs)
+        nodes = np.arange(0, self.assembly.dofs, dtype='float')
+        nodes = np.insert(nodes, [k + 1 for k in gear_nodes], np.nan)
 
         fig_modes, axs = plt.subplots(modes, 1, sharex=True)
 
@@ -131,20 +144,25 @@ class Plots:
             eigenvector = eigenmodes[:, i]
             max_disp = np.argmax(np.abs(eigenvector))
             eigenvector_rotated = eigenvector * np.exp(-1.0j * phases[max_disp, i])
+            eigenvector = np.real(eigenvector_rotated) / np.sqrt(np.sum(np.real(eigenvector_rotated) ** 2))
             self.plot_on_ax(self.assembly, axs[i], lighter=True)
+
+            eigenvector = np.insert(eigenvector, gear_nodes_red, (eigenvector)[gear_nodes_red])
+            eigenvector = np.insert(eigenvector, [j + 1 for j in gear_nodes], np.nan)
             axs[i].plot(
                 nodes,
-                np.real(eigenvector_rotated)
-                / np.sqrt(np.sum(np.real(eigenvector_rotated) ** 2)),
+                eigenvector,
+                '-',
                 color="red",
             )
-            axs[i].plot(
-                [nodes, nodes],
-                [np.abs(eigenvector_rotated), -np.abs(eigenvector_rotated)],
-                "--",
-                color="black",
-            )
-            axs[i].set_ylim([-1.1, 1.1])
+            # to be fixed:
+            # axs[i].plot(
+            #     [nodes, nodes],
+            #     [np.abs(eigenvector_rotated), -np.abs(eigenvector_rotated)],
+            #     "--",
+            #     color="black",
+            # )
+            axs[i].set_ylim([-2*len(gear_nodes)-1.1, 1.1])
         plt.show()
 
     def torque_response_plot(self, omegas, T, show_plot=False):
@@ -226,16 +244,19 @@ class Plots:
             disk_edge_color = 'darkgrey'
             spring_color = 'darkgrey'
             dashpot_color = 'darkgrey'
+            connecting_line_color = 'darkgrey'
         else:
             gear_face_color = 'red'
             disk_face_color = 'darkgrey'
             disk_edge_color = 'black'
             spring_color = 'black'
             dashpot_color = 'black'
+            connecting_line_color = 'black'
         lw = 1.5
         disk_lw = lw
         spring_lw = lw
         dashpot_lw = lw
+        connecting_line_lw = lw
 
         def draw_spring(shaft, y_pos):
             left  = shaft.nl
@@ -339,7 +360,7 @@ class Plots:
             if gear.stages is None:
                 pass
             else:
-                plt.plot(
+                ax.plot(
                     [pos[0], pos[0], gear.stages[0][0][0], gear.stages[0][0][0]],
                     [
                         pos[1],
@@ -347,6 +368,8 @@ class Plots:
                         pos[1] + 1,
                         gear_pos[gear.stages[0][0][0]][1][1],
                     ],
-                    "k--",
+                    "--",
+                    color=connecting_line_color,
+                    lw=connecting_line_lw,
                     zorder=-1)
         return
